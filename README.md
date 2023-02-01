@@ -56,6 +56,8 @@ Dump was completed, please send sysdump-8Ci-20230201063342.tar.gz to the support
 
 > Unpack the attached tar file and double click on index.html
 
+See example [sysdump-sample](https://github.com/saeedtx/sysdbugz/releases/download/sysdump-sample-output/sysdump-iBS-20230201064812.tar.gz)
+
 ##### OR
 ```
 tar -xvf /tmp/sysdump-8Ci-20230201063342.tar.gz
