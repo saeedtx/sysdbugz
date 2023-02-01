@@ -59,7 +59,7 @@ BASETMPDIR=$(dirname $TMPDIR)
 echo "<a href=".">$ARCHIVE_NAME</a>" > $TMPDIR/index.html
 
 # we're done, archive time..
-echo "Archiving $TMPDIR into $ARCHIVE_NAME.tar.gz
+echo "Archiving $TMPDIR into $ARCHIVE_NAME.tar.gz"
 
 set -e
 (set -x; tar -C $BASETMPDIR -czf $ARCHIVE_NAME.tar.gz $ARCHIVE_NAME )
