@@ -12,6 +12,7 @@ NETIFACE=$1
 # make tmp dir:
 TMPDIR=$(mktemp -d /tmp/sysdump-XXX-$(date +%Y%m%d%H%M%S))
 # run a command line and save output to file under $TMPDIR
+
 dodump() {
 	local FNAME=$1; shift
 	echo "#$ $@" >> $TMPDIR/$FNAME
@@ -42,7 +43,7 @@ ethtool_flags="-i -k -c -g -l -x -S -a -m --show-priv-flags -T -u --show-fec --s
 for flag in $ethtool_flags; do dodump_ethtool $flag; done
 
 # devlink
-dodump_devlink() { 
+dodump_devlink() {
 	local name="$@";name="${name// /_}"
 	dodump devlink-${name} devlink $@
 }
@@ -52,13 +53,24 @@ dodump_devlink dev param
 dodump_devlink port
 dodump_devlink health
 
+# net procfs
+(set -x; cp -rf /proc/net $TMPDIR/proc_net > /dev/null 2>&1 )
+
+# select sysfs
+dodump sysctl-a "sysctl -a"
+(set -x; cp -rf $(realpath /sys/class/net/$NETIFACE) $TMPDIR/sys_class_net_$NETIFACE > /dev/null 2>&1 )
+(set -x; cp -rf $(realpath /sys/class/net/$NETIFACE/device) $TMPDIR/sys_class_net_${NETIFACE}_device > /dev/null 2>&1 )
+dodump "proc_interrupts" "cat /proc/interrupts"
+(set -x; cp -rf /proc/irq $TMPDIR/proc_irqs)
+
+# we're done, archive time..
+
 ARCHIVE_NAME=$(basename $TMPDIR)
 BASETMPDIR=$(dirname $TMPDIR)
 
 # dobule click away from reading the dumps
 echo "<a href=".">$ARCHIVE_NAME</a>" > $TMPDIR/index.html
 
-# we're done, archive time..
 echo "Archiving $TMPDIR into $ARCHIVE_NAME.tar.gz"
 
 set -e
@@ -70,8 +82,7 @@ set -e
 rm -rf $TMPDIR
 
 echo "Dump was completed, please send $ARCHIVE_NAME.tar.gz to the support team"
-echo $(pwd)/$ARCHIVE_NAME.tar.gz 
-
+echo $(pwd)/$ARCHIVE_NAME.tar.gz
 
 # to view contents of the archive:
 # tar -xvf $ARCHIVE_NAME.tar.gz
