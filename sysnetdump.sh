@@ -5,12 +5,17 @@
 # date: 2019-05-08
 # dump system information for debugging, Networking centric
 
+SCRIPT_DIR=$(dirname "$(realpath "$0")")
+
 NETIFACE=$1
 
 [ -z $NETIFACE ] && { echo "Please specify the network interface" ; exit 1 ; }
 
-# make tmp dir:
-TMPDIR=$(mktemp -d /tmp/sysdump-XXX-$(date +%Y%m%d%H%M%S))
+BASEDIR=$2
+[ -z $BASEDIR ] && BASEDIR=$(mktemp -d /tmp/sysdump-$NETIFACE-XXX)
+TMPDIR=$BASEDIR/sysdump-$NETIFACE-$(date +%Y-%m-%d-%H%M%S)
+
+mkdir -p $TMPDIR
 # run a command line and save output to file under $TMPDIR
 
 dodump() {
@@ -63,6 +68,12 @@ dodump sysctl-a "sysctl -a"
 dodump "proc_interrupts" "cat /proc/interrupts"
 (set -x; cp -rf /proc/irq $TMPDIR/proc_irqs)
 
+
+if [ -f "$SCRIPT_DIR/devlink_health_report.sh" ]; then
+	$SCRIPT_DIR/devlink_health_report.sh $TMPDIR/devlink_health_report
+else
+	echo "Warning: $SCRIPT_DIR/devlink_health_report.sh not found, skipping devlink health report."
+fi
 # we're done, archive time..
 
 ARCHIVE_NAME=$(basename $TMPDIR)
@@ -74,15 +85,15 @@ echo "<a href=".">$ARCHIVE_NAME</a>" > $TMPDIR/index.html
 echo "Archiving $TMPDIR into $ARCHIVE_NAME.tar.gz"
 
 set -e
-(set -x; tar -C $BASETMPDIR -czf $ARCHIVE_NAME.tar.gz $ARCHIVE_NAME )
+(set -x; tar -C $BASETMPDIR -czf $BASETMPDIR/$ARCHIVE_NAME.tar.gz $ARCHIVE_NAME )
 
 #list files in archive
 #(set -x; tar -tzf $ARCHIVE_NAME.tar.gz)
 
-rm -rf $TMPDIR
+#rm -rf $TMPDIR
 
 echo "Dump was completed, please send $ARCHIVE_NAME.tar.gz to the support team"
-echo $(pwd)/$ARCHIVE_NAME.tar.gz
+echo $BASETMPDIR/$ARCHIVE_NAME.tar.gz
 
 # to view contents of the archive:
 # tar -xvf $ARCHIVE_NAME.tar.gz
