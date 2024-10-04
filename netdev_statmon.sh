@@ -1,24 +1,35 @@
 #!/bin/bash
 
+# This script collects network statistics for a list of network interfaces and monitors IRQ affinity changes for a specified duration.
+# The collected logs are saved in a temporary directory with a timestamp and compressed into a tar file.
+# The script takes 3 arguments: interval, duration, and title, followed by a list of network interfaces.
+# Usage: ./netdev_statmon.sh interval duration title <list of net interfaces>
+
 swd () { dirname $(readlink -f $(realpath ${BASH_SOURCE[0]})); }
 
 usage() {
-	echo "Usage: $0 interval duration <list of net interfaces>"
+	echo "Usage: $0 interval duration title <list of net interfaces>"
 	exit 1
 }
 
 interval=$1
 duration=$2
+title=$3
 
-# mktemp with date in the name
-LOG_DIR=$(mktemp -d  /tmp/$(basename $0)-$(hostname -s)-$(date +"%Y%m%d-%H%M%S").XXX )
 [ -z "$interval" ] && usage
 [ -z "$duration" ] && usage
+[ -z "$title" ] && usage
 
-shift 2
-
+shift 3
 [ -z "$1" ] && usage
 interfaces=$@
+
+# mktemp with date in the name
+LOG_DIR=/tmp/$(basename $0)-$(hostname -s)-$title-${interfaces// /_}
+[ -d $LOG_DIR ] && { echo "ERROR: $LOG_DIR already exists"; exit 1; }
+
+mkdir -p $LOG_DIR
+
 pcidevs=$(for i in $interfaces; do ethtool -i $i | grep bus-info | awk '{print $2}'; done)
 pcidevs_pattern=$(echo $pcidevs | sed 's/ /|/g')
 
@@ -37,7 +48,6 @@ collect_logs() {
 		(set -x; ethtool -S $i > $LOG_DIR/$i.ethtool.S.$LOG_NAME.log; )
 	done
 }
-# this will sleep duration
 
 echo "Collecting logs before"
 echo "$(date +'%Y%m%d-%H:%M:%S')" > $LOG_DIR/tstamp.before.log
