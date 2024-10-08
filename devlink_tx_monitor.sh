@@ -4,14 +4,17 @@ set +x; set -e
 
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 
-[ -z "$1" ] && { echo "Please provide the pci device as an argument"; exit 1; }
-device=pci/$1
+[ -z "$1" ] && { echo "Please provide the netdev as an argument"; exit 1; }
+
+netdev=$1
+pci_dev=$(ethtool -i $netdev | grep bus-info: | cut -d: -f2- | xargs)
+[ -z "$pci_dev" ] && { echo "No PCI device found for $netdev"; exit 1; }
+device=pci/$pci_dev
 output_dir=$2
 interval=${3:-1}
 
-netdev=$(ls -1 /sys/bus/pci/devices/$1/net)
-
-[ -z "$netdev" ] && { echo "No network device found for $device"; exit 1; }
+#netdev=$(ls -1 /sys/bus/pci/devices/$1/net)
+#[ -z "$netdev" ] && { echo "No network device found for $device"; exit 1; }
 
 aux_dev_file=$(find /sys/class/net/$netdev/device/ -type d -name "mlx5_core.eth.*")
 if [ -n "$aux_dev_file" ]; then
