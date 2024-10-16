@@ -2,16 +2,25 @@
 
 set +x; set -e
 
-SCRIPT_DIR=$(dirname "$(realpath "$0")")
+SCRIPT_DIR=$(dirname "$(realpath "$0")")/..
 
-[ -z "$1" ] && { echo "Please provide the netdev as an argument"; exit 1; }
+[ -z "$1" ] && { echo "Please provide the output directory as an argument"; exit 1; }
+[ -z "$2" ] && { echo "Please provide the interval as an argument"; exit 1; }
+[ -z "$3" ] && { echo "Please provide the netdev as an argument"; exit 1; }
 
-netdev=$1
+output_dir=$1
+interval=$2
+
+netdev=$3
+
+while [ ! -d "/sys/class/net/$netdev" ]; do
+	echo "Network device $netdev not found. Waiting..."
+	sleep 5
+done
+
 pci_dev=$(ethtool -i $netdev | grep bus-info: | cut -d: -f2- | xargs)
 [ -z "$pci_dev" ] && { echo "No PCI device found for $netdev"; exit 1; }
 device=pci/$pci_dev
-output_dir=$2
-interval=${3:-1}
 
 #netdev=$(ls -1 /sys/bus/pci/devices/$1/net)
 #[ -z "$netdev" ] && { echo "No network device found for $device"; exit 1; }
@@ -95,5 +104,3 @@ while true; do
 	check_cq_state "$out_file"
 	sleep $interval
 done
-
-find /sys/class/net/$netdev/device/ -type f -name 'mlx5_core.eth.*'

@@ -20,8 +20,8 @@ mkdir -p $TMPDIR
 
 dodump() {
 	local FNAME=$1; shift
-	echo "#$ $@" >> $TMPDIR/$FNAME
-	(set -x; $@ &>> $TMPDIR/$FNAME)
+	echo "#$ $*" >> "$TMPDIR/$FNAME"
+	(set -x; eval "$*" &>> "$TMPDIR/$FNAME")
 }
 
 echo "Dumping system information to $TMPDIR"
@@ -32,6 +32,8 @@ dodump lscpu "lscpu"
 dodump lspci "lspci -vvv"
 dodump "ifconfig" "ifconfig -a"
 dodump "dmesg" "dmesg -T"
+dodump "journalctl-week" journalctl --since \'6 days ago\'
+dodump "journalctl-kernel" journalctl -k --since \'6 days ago\'
 
 DRIVER_NAME=$(ethtool -i $NETIFACE | grep driver | awk '{print $2}')
 dodump "modinfo" "modinfo $DRIVER_NAME"

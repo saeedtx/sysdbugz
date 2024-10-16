@@ -1,0 +1,14 @@
+[Unit]
+Description=SysMon Logger Service for %i
+After=multi-user.target
+ConditionPathExists=/etc/sysmon/%i.sysmon.conf
+
+[Service]
+#EnvironmentFile=/etc/sysmon/%i.sysmon.conf
+Environment="SYSMON_LOG_DIR=/var/log/sysmon/%i"
+ExecStartPre=/bin/mkdir -p $SYSMON_LOG_DIR
+ExecStart=/bin/bash -c "/usr/local/bin/sysmon/sysmon_log.sh /etc/sysmon/%i.sysmon.conf"
+
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,47 @@
+# SysMon Logging System
+
+**SysMon** is a flexible logging system designed to collect logs using custom scripts managed by systemd. The logs are organized in timestamped directories for easy access and management.
+
+## Project Structure
+sysmon/
+	└── service/
+		├── sysmon@.service # Systemd service template
+	└── /usr/local/bin/sysmon/
+	└── /var/log/sysmon/ # Directory for log outputs
+
+
+### Installation
+
+SysMon can be installed easily using the provided `Makefile`.
+
+#### Prerequisites
+
+- A Linux distribution with `systemd` support (e.g., Ubuntu, CentOS).
+- Necessary permissions to create directories and install services.
+
+### Step 1: Clone the Repository
+
+Clone this repository to your local machine:
+
+```bash
+git clone <repository-url>
+cd sysmon
+
+```
+
+### Step 2: # install
+```bash
+sudo make install
+```
+
+### Step 3: start a logger
+```
+sudo systemctl start sysmon@example_logger--5-param1-param2-param3.service
+```
+
+### Summary
+
+This `README.md` file provides comprehensive information about the SysMon logging system, including its structure, installation instructions, usage examples, and configuration details. You can replace `<repository-url>` with the actual URL of your project repository when you're ready to share it.
+
+If you need any further modifications or additions, just let me know!
+
