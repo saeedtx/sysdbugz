@@ -23,7 +23,7 @@ install:
 
 # make tx_stcuk_mon IFNAME=eth2 DEV='pci/0000:08:00.0/65535/'
 tx_stuck:
-	$(MAKE) -C sysmon tx_stcuk_mon IFNAME="$(IFNAME)" DEV="$(DEV)"
+	$(MAKE) -C sysmon tx_stuck IFNAME="$(IFNAME)" DEV="$(DEV)"
 
 uninstall:
 	# Remove directories

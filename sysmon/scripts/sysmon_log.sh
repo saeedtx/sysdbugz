@@ -6,16 +6,14 @@
 
 LOG_DIR=$1; INTERVAL=$2
 shift 2
-COMMAND="$@"
 
 usage () {
-	echo "Usage1: $0 <log_dir> <interval> <command>"
+	echo "Usage1: $0 <log_dir> <interval> <tag1> <command1> <tag2> <command2> ..."
 	echo "Usage2: $0 <conf_file>"
 	echo "Interval format: T:N where N is the log amount and T is the interval in seconds"
 	echo "N is optional. If not provided, the script will run indefinitely."
 	exit 1
 }
-
 
 [ -z $1 ] && usage
 
@@ -24,18 +22,25 @@ if [ -f $1 ]; then
 	source $1
 	LOG_DIR=$SYSMON_LOG_DIR
 	INTERVAL=$SYSMON_INTERVAL
-	COMMAND=$SYSMON_CMD
+else
+	SYSMON_CMDS=()
+	while [ $# -gt 1 ]; do
+		echo found command \"$1\" : \"$2\"
+		SYSMON_CMDS+=("$1")
+		SYSMON_CMDS+=("$2")
+		shift 2
+	done
 fi
 
-if [ -z "$LOG_DIR" ] || [ -z "$INTERVAL" ] || [ -z "$COMMAND" ]; then
+if [ -z "$LOG_DIR" ] || [ -z "$INTERVAL" ] || [ -z "${#SYSMON_CMDS[@]}" ]; then
 	echo "LOG_DIR=$LOG_DIR"
 	echo "INTERVAL=$INTERVAL"
-	echo "COMMAND=$COMMAND"
+	echo "SYSMON_CMDS=${SYSMON_CMDS[@]}"
 	echo "Error: Missing required parameters"
 	usage
 fi
 
-# Extract log amount and interval
+# Extract log count and interval
 INTERVAL_TIME=$(echo "$INTERVAL" | cut -d':' -f1)
 if [[ "$INTERVAL" == *:* ]]; then
 	LOG_COUNT=$(echo "$INTERVAL" | cut -d':' -f2)
@@ -57,11 +62,12 @@ fi
 
 set -e
 
+# remove any trailing slashes
+LOG_DIR=$(echo $LOG_DIR | sed 's:/*$::')
 LOG_DIR=${LOG_DIR}-$(date +"%Y%m%d_%H%M%S")
 export SYSMON_LOG_DIR=$LOG_DIR
 
 mkdir -p "$LOG_DIR"
-echo "$COMMAND" > ${LOG_DIR}/commandline.txt
 
 sysmon_msg() {
 	local log_type="$1"
@@ -71,41 +77,50 @@ sysmon_msg() {
 
 travers_commands()
 {
-	local fun=$1
-	local title=""
-	local cmd=""
+	# pass the name of the array as the first argument
+	local array_name="$1"
+	eval "local COMMANDS_LIST=(\"\${$array_name[@]}\")"
+	local FUN=$2
+	local FUN_ARGS=${@:3}
+	local TITLE=""
+	local CMD=""
 
-	for ((i = 0; i < ${#SYSMON_CMDS[@]}; i+=2)); do
-		title="${SYSMON_CMDS[i]}"
-		cmd="${SYSMON_CMDS[i+1]}"
-		sysmon_msg "INFO" "	$title: $cmd"
-		$fun "$title" "$cmd"
+	for ((i = 0; i < ${#COMMANDS_LIST[@]}; i+=2)); do
+		TITLE="${COMMANDS_LIST[i]}"
+		CMD="${COMMANDS_LIST[i+1]}"
+		sysmon_msg "INFO" "	$TITLE: $CMD"
+		$FUN "$TITLE" "$CMD" $FUN_ARGS &
 	done
+	wait
 }
 
 RUN_COUNTER=0
 
-sysmon_msg INFO "MAIN_COMMAND: $COMMAND"
 sysmon_msg INFO "LOG_DIR: $LOG_DIR"
 sysmon_msg INFO "INTERVAL: $INTERVAL_TIME"
 sysmon_msg INFO "LOG_COUNT: $LOG_COUNT"
 
+sysmon_msg "INFO" "Commands to monitor every $INTERVAL_TIME seconds, DIR: $LOG_DIR"
 make_command_dir()
 {
-	local title=$1;	local cmd=$2
-	mkdir -p ${LOG_DIR}/${title}
-	echo "$cmd" >> ${LOG_DIR}/${title}/commandline.txt
+	local title=$1;	local cmd=$2; local PARENT_DIR=${3:-$LOG_DIR}
+	mkdir -p ${PARENT_DIR}/${title}
+	echo "$cmd" >> ${PARENT_DIR}/${title}/commandline.txt
 }
+travers_commands SYSMON_CMDS make_command_dir $LOG_DIR
 
-if [ ${#SYSMON_CMDS[@]} -gt 0 ]; then
-	sysmon_msg "INFO" "Extra commands:"
-	travers_commands make_command_dir
-fi
+exec_pre_post_commands()
+{
+	local title=$1;	local cmd=$2; local PARENT_DIR=${LOG_DIR}/${3}
+	mkdir -p ${PARENT_DIR}/
+	LOG_FILE=${PARENT_DIR}/${title}.txt
 
-[ -n "$SYSMON_PRE" ] && {
-	sysmon_msg INFO "PRE_CMD: $SYSMON_PRE"
-	eval "$SYSMON_PRE" | tee -a ${LOG_DIR}/run.log
-	sysmon_msg INFO "PRE_CMD: Done"
+	echo "## command line: $cmd" > ${LOG_FILE}
+	eval "$cmd" >> "$LOG_FILE" 2>&1 || {
+		err_code=$?
+		sysmon_msg "Error" "Command '$cmd' failed with exit code $err_code"
+		sysmon_msg "Error" "$(cat $LOG_FILE)"
+	}
 }
 
 on_terminate() {
@@ -117,20 +132,30 @@ on_terminate() {
 	if [ $exit_code -eq 143 ] || [ $exit_code -eq 130 ]; then
 		exit_code=0
 	fi
+	sysmon_msg INFO "Terminating script with exit code $exit_code"
+	set +e
+	# kill all child processes
+	pkill -P $$
 
-	[ -n "$SYSMON_POST" ] && {
-		sysmon_msg INFO "POST_CMD: $SYSMON_POST"
-		eval "$SYSMON_POST" | tee -a ${LOG_DIR}/run.log
-		sysmon_msg INFO "POST_CMD: Done"
+	[ ${#SYSMON_POST_CMDS[@]} -gt 0 ] && {
+		sysmon_msg "INFO" "Post monitor commands:"
+		travers_commands SYSMON_POST_CMDS exec_pre_post_commands post
 	}
+
 	sysmon_msg INFO "DUMP LOGS: $LOG_DIR"
 	exit $exit_code
 }
-trap 'on_terminate' SIGINT SIGTERM EXIT ERR
+trap 'on_terminate' SIGINT SIGTERM ERR
 
-exec_extra_command() {
+[ ${#SYSMON_PRE_CMDS[@]} -gt 0 ] && {
+	sysmon_msg "INFO" "Pre monitor Commands:"
+	travers_commands SYSMON_PRE_CMDS exec_pre_post_commands pre
+}
+
+exec_mon_cmd() {
 	local title=$1
 	local cmd=$2
+	TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 	LOG_FILE="${LOG_DIR}/${title}/sysmon_dump_${TIMESTAMP}.txt"
 	eval "$cmd" > "$LOG_FILE" 2>&1 || {
 		err_code=$?
@@ -138,27 +163,17 @@ exec_extra_command() {
 		sysmon_msg "Error" "$(cat $LOG_FILE)"
 		exit $err_code
 	}
+
+	[ -n "${SYSMON_ANALYZE[$title]}" ] && {
+		sysmon_msg INFO "SYSMON_LOG: Analyzing log file: cat $LOG_FILE | ${SYSMON_ANALYZE[$title]}"
+		cat $LOG_FILE | eval "${SYSMON_ANALYZE[$title]}"
+	}
 }
 
 sysmon_msg INFO "Starting sysmon_log.sh script"
 while [ "$LOG_COUNT" -eq 0 ] || [ "$RUN_COUNTER" -lt "$LOG_COUNT" ]; do
-	if [ ${#SYSMON_CMDS[@]} -gt 0 ]; then
-		sysmon_msg INFO "Executing extra commands: "
-		travers_commands exec_extra_command
-	fi
 
-	if [ -n "$COMMAND" ]; then
-		TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-		LOG_FILE="${LOG_DIR}/sysmon_dump_${TIMESTAMP}.txt"
-		sysmon_msg INFO "EXEC: $COMMAND"
-		eval "$COMMAND" | tee -a "$LOG_FILE"
-	fi
-	[ -n "$SYSMON_ANALYZE" ] && {
-		sysmon_msg INFO "SYSMON_LOG: Analyzing log file: cat $LOG_FILE | $SYSMON_ANALYZE"
-		cat $LOG_FILE | eval "$SYSMON_ANALYZE"
-	}
-	wait
-
+	travers_commands SYSMON_CMDS exec_mon_cmd
 	sleep "$INTERVAL_TIME"
 	RUN_COUNTER=$((RUN_COUNTER + 1))
 done
