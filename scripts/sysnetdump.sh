@@ -218,6 +218,7 @@ done
 
 
 #debugfs
+mount -t debugfs none /sys/kernel/debug || true
 if [ -d /sys/kernel/debug/mlx5/ ]; then
 	(set -x; cp -rf /sys/kernel/debug/mlx5/ $TMPDIR/debugfs_mlx5 > /dev/null 2>&1 )
 fi

@@ -6,12 +6,12 @@ Dumps system information related to networking and packs it into a tar file.
 
 Usage:
 ```
-curl -s https://raw.githubusercontent.com/saeedtx/sysdbugz/main/sysnetdump.sh | sudo bash -s <network interface name>
+curl -s https://raw.githubusercontent.com/saeedtx/sysdbugz/main/scripts/sysnetdump.sh | sudo bash -s <network interface name>
 ```
 
 #### example OUTPUT:
 ```
-curl -s https://raw.githubusercontent.com/saeedtx/sysdbugz/main/sysnetdump.sh | sudo bash -s mlx0
+curl -s https://raw.githubusercontent.com/saeedtx/sysdbugz/main/scripts/sysnetdump.sh | sudo bash -s mlx0
 ```
 ```
 Dumping system information to /tmp/sysdump-8Ci-20230201063342
