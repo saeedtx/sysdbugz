@@ -8,7 +8,8 @@
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 
 NETDEVS=()
-PCI_DEV=""
+PCI_DEVS_FOUND=()
+PCI_DEVS=()
 
 extract_device() {
 	local DEV=$1
@@ -25,12 +26,24 @@ extract_device() {
 	fi
 	[ -z $PCI_DEV ] && return
 	# find all netdevs associated with the PCI device
+	PCI_DEVS+=($PCI_DEV)
 	NETDEVS+=($(ls -1 /sys/class/net/ | grep -f <(ls -1 /sys/bus/pci/devices/$PCI_DEV/net/)))
 }
 
-[ -z $1 ] && { echo "Please specify a network interface/pci device" ; exit 1 ; }
+find_mellanox_pci_devs() {
+	PCI_DEVS_FOUND=($(lspci -d 15b3: -D | awk '{print $1}'))
+}
 
-extract_device $1
+[ ! -z "$1" ] && PCI_DEVS_FOUND+=($1) || { find_mellanox_pci_devs; }
+
+if [ ${#PCI_DEVS_FOUND[@]} -eq 0 ]; then
+	echo "No Mellanox PCI devices found"
+	exit 1
+fi
+
+for PCI_DEV in ${PCI_DEVS_FOUND[@]}; do
+	extract_device $PCI_DEV
+done
 
 BASEDIR=$2
 [ -z $BASEDIR ] && BASEDIR=/tmp/sysdump/
@@ -42,6 +55,8 @@ mkdir -p $TMPDIR
 DST_DIR=$TMPDIR
 dodump() {
 	local FNAME=$1; shift
+	# replace "/" with "_" in FNAME
+	FNAME=${FNAME//\//_}
 	echo "#$ $*" >> "$DST_DIR/$FNAME"
 	(set -x; eval "$*" &>> "$DST_DIR/$FNAME")
 }
@@ -131,6 +146,12 @@ devlink_health_report() {
 	(set -x; $cmd_exec &>> "$out_file"; set +x)
 }
 
+devlink_dev_dumps() {
+	local DEV=$1
+	dodump_devlink dev eswitch show pci/$DEV
+	dodump_devlink resource show pci/$DEV
+}
+
 devlink_health_dev() {
 	local DEV=$1
 	echo "Dumping devlink health information for $DEV"
@@ -170,6 +191,7 @@ function pcidev_dumps() {
 	(set -x; mkdir -p $DST_DIR/pci_dev; cp -rf /sys/bus/pci/devices/$PCI_DEV/* $DST_DIR/pci_dev/ > /dev/null 2>&1 )
 
 	devlink_health_pci $PCI_DEV
+	devlink_dev_dumps $PCI_DEV
 	DST_DIR=$TMPDIR
 }
 
@@ -210,12 +232,15 @@ system_dumps
 
 devlink_dumps
 
-pcidev_dumps $PCI_DEV
-
-for NETIFACE in ${NETDEVS[@]}; do
-	netdev_dumps $NETIFACE
+for PCI_DEV in ${PCI_DEVS[@]}; do
+	( pcidev_dumps $PCI_DEV ) &
 done
 
+for NETIFACE in ${NETDEVS[@]}; do
+	( netdev_dumps $NETIFACE ) &
+done
+
+wait
 
 #debugfs
 mount -t debugfs none /sys/kernel/debug || true
